@@ -98,7 +98,7 @@ def train(args, device):
                     res_mask = torch.zeros(model_size,device=device)
                     res_ = dif.sub(prev_dif, alpha=1).add(errors[cl]) ## get Difference values then add errors
                     if localIter < localIterCap: ## tau < T
-                        res_mask[torch.masked_select(m_freq_inds, randMask[localIter])] = 1 ## make mask from random inds
+                        res_mask[torch.masked_select(m_freq_inds, randMask[localIter-1])] = 1 ## make mask from random inds
                     else:
                         freq_inds = torch.topk(res_.abs(), k=k, dim=0)[1]
                         res_mask[freq_inds] = 1 ## make the mask from all inds
