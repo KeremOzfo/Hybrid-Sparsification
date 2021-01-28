@@ -65,14 +65,17 @@ def train(args, device):
     model_size = sf.count_parameters(net_ps)
     assert N_s/num_client > args.LocalIter * args.bs
     localIterCap = args.LocalIter
-    bias_mask = sf.get_bias_mask(net_ps,device) if args.biasFair else torch.zeros(model_size).to(device)
+    bias_mask = sf.get_BN_mask(net_ps,device) if args.biasFair else torch.zeros(model_size).to(device)
     total_bias = torch.sum(bias_mask).item()
     freq_vec = torch.zeros(model_size,device=device)
-    k = math.ceil(model_size / args.sparsity)
-    C = math.ceil(k /args.C_rand)
+    k = int(math.ceil(model_size / args.sparsity) - total_bias)
+    C = int(math.ceil(model_size / args.C_rand) - total_bias)
+    freq_k = math.ceil(model_size /args.freq_K)
     errors = [torch.zeros(model_size,device=device) for cl in range(num_client)]
     randMask = [None for h in range(args.LocalIter-1)]
     m_freq_inds = None
+
+    print('bias percent',total_bias / model_size * 100, total_bias)
     for round in tqdm(range(args.comm_round)):
         avg_res = torch.zeros(model_size,device=device)
         ps_flat = sf.get_model_flattened(net_ps, device)
@@ -100,8 +103,9 @@ def train(args, device):
                     if localIter < localIterCap: ## tau < T
                         res_mask[torch.masked_select(m_freq_inds, randMask[localIter-1])] = 1 ## make mask from random inds
                     else:
-                        freq_inds = torch.topk(res_.abs(), k=k, dim=0)[1]
+                        freq_inds = torch.topk(res_.mul(1-bias_mask).abs(), k=k, dim=0)[1]
                         res_mask[freq_inds] = 1 ## make the mask from all inds
+                    res_mask.add_(bias_mask,alpha=1)
                     prev_dif = dif
                     errors[cl] = res_.mul(1 - res_mask) ### update errors
                     avg_res.add_(res_.mul(res_mask), alpha=1) ## mask residual values and send to PS
@@ -127,7 +131,7 @@ def train(args, device):
                 Every worker uses same mask for the same local iteration
                 Every local iteration has different random mask. 
                 '''
-            m_freq_inds = torch.topk(freq_vec,k=k,dim=0)[1] #### get most frequent inds
+            m_freq_inds = torch.topk(freq_vec.mul(1-bias_mask),k=k,dim=0)[1] #### get most frequent inds
 
 
         [sf.pull_model(user,net_ps) for user in net_users]
@@ -166,8 +170,9 @@ def train_topk(args, device):
     model_size = sf.count_parameters(net_ps)
     assert N_s/num_client > args.LocalIter * args.bs
     localIterCap = args.LocalIter
-    bias_mask = sf.get_bias_mask(net_ps,device) if args.biasFair else torch.zeros(model_size).to(device)
+    bias_mask = sf.get_BN_mask(net_ps, device) if args.biasFair else torch.zeros(model_size).to(device)
     total_bias = torch.sum(bias_mask).item()
+    print('bias percent',total_bias / model_size * 100, total_bias)
     k = math.ceil(model_size / args.sparsity)
     errors = [torch.zeros(model_size,device=device) for cl in range(num_client)]
     for round in tqdm(range(args.comm_round)):
@@ -198,8 +203,9 @@ def train_topk(args, device):
                 topped_m = torch.zeros(model_size,device=device)
                 flat_model= sf.get_model_flattened(user,device)
                 dif = flat_model.sub(ps_flat,alpha=1).add(errors[c])
-                vals, inds = torch.topk(dif.abs(), k=k,dim=0)
+                vals, inds = torch.topk(dif.mul(1-bias_mask).abs(), k=k,dim=0)
                 topped_m[inds] = 1
+                topped_m.add_(bias_mask,alpha=1)
                 avg_dif.add_(dif.mul(topped_m),alpha=1/num_client)
                 errors[c] = dif.mul(1-topped_m)
                 c+=1

@@ -21,7 +21,8 @@ if __name__ == '__main__':
     if args.mode == 'top-K':
         simulation = 'TopK-LocalIter_{}-K_{}'.format(args.LocalIter,args.sparsity)
     else:
-        simulation = 'Hyprid_sparse-LocalIter_{}-K_{}_C{}'.format(args.LocalIter,args.sparsity,args.C_rand)
+        simulation = 'Hyprid_sparse-LocalIter_{}-sparse_K_{}_C{}_freq-K_{}'.format(
+            args.LocalIter,args.sparsity,args.C_rand,args.freq_K)
     newFile = simulation
     if not os.path.exists(os.getcwd() + '/Results'):
         os.mkdir(os.getcwd() + '/Results')

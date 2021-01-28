@@ -2,6 +2,7 @@ import torch
 import math
 import time
 import numpy as np
+import torch.nn as nn
 
 
 def pull_model(model_user, model_server):
@@ -294,6 +295,26 @@ def custom_SGD(model,flat_momentum,mask,net_sizes,ind_pairs,lr,device,args):
     flat_model = flat_model.add(flat_grad, alpha=-lr)
     make_model_unflattened(model,flat_model,net_sizes,ind_pairs)
     return None
+
+def get_BN_mask(net,device):
+    mask = torch.empty(0).to(device)
+    for layer in net.modules():  # Prune only convolutional and linear layers
+        if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.Linear):
+            layer_weight = layer.weight
+            len = layer_weight.numel()
+            mask_ = torch.zeros(len,device=device)
+            mask = torch.cat((mask, mask_), 0)
+            if layer.bias is not None:
+                bias = layer.bias.numel()
+                mask_ = torch.ones(bias, device=device)
+                mask = torch.cat((mask, mask_), 0)
+        elif isinstance(layer, nn.BatchNorm2d):
+            bn_params = 0
+            for p in layer.parameters():
+                bn_params += p.numel()
+            mask_ = torch.ones(bn_params, device=device)
+            mask = torch.cat((mask, mask_), 0)
+    return mask
 
 
 
